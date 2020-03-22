@@ -50,7 +50,7 @@ validation <- temp %>%
 removed <- anti_join(temp, validation)
 edx <- rbind(edx, removed)
 
-rm(dl, ratings, movies, test_index, temp, movielens, removed)
+rm(dl, ratings, movies, test_index, temp, removed)
 
 
 # add year as a column in the edx & validation datasets
@@ -135,6 +135,10 @@ mu
 naive_rmse <- RMSE(validation$rating, mu)
 naive_rmse
 
+# Create a table storing the results
+rmse_results <- data_frame(method = 'Just the average', RMSE = naive_rmse)
+
+
 # Movie Effect Model #
 movie_avgs <- edx %>%
   group_by(movieId) %>%
@@ -147,8 +151,13 @@ movie_avgs %>% ggplot(aes(b_i)) +
 predicted_rating <- mu + validation %>%
   left_join(movie_avgs, by = 'movieId') %>%
   pull(b_i)
-model_rmse <- RMSE(validation$rating, predicted_rating)
-model_rmse
+model_1_rmse <- RMSE(validation$rating, predicted_rating)
+model_1_rmse
+
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method = 'Movie Effect Model',
+                                     RMSE = model_1_rmse))
+rmse_results %>% knitr::kable()
 
 # Movie and User Effect Model #
 user_avgs <- edx %>% 
@@ -166,8 +175,63 @@ predicted_rating <- validation %>%
   mutate(pred = mu + b_i + b_u) %>%
   pull(pred)
 
-user_rmse <- RMSE(validation$rating, predicted_rating)  
-user_rmse
+model_2_rmse <- RMSE(validation$rating, predicted_rating)  
+model_2_rmse
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method = 'Movie + User Effects Model',
+                                     RMSE = model_2_rmse))
+
+# 
+edx %>% 
+  left_join(movie_avgs, by='movieId') %>%
+  mutate(residual = rating - (mu + b_i)) %>%
+  arrange(desc(abs(residual))) %>% 
+  select(title,  residual) %>% slice(1:10) %>% knitr::kable()
+
+movie_titles <- movielens %>% 
+  select(movieId, title) %>%
+  distinct()
+
+movie_avgs %>% left_join(movie_titles, by="movieId") %>%
+  arrange(desc(b_i)) %>% 
+  select(title, b_i) %>% 
+  slice(1:10) %>%  
+  knitr::kable()
+
+movie_avgs %>% left_join(movie_titles, by="movieId") %>%
+  arrange(b_i) %>% 
+  select(title, b_i) %>% 
+  slice(1:10) %>%  
+  knitr::kable()
+
+edx %>% dplyr::count(movieId) %>% 
+  left_join(movie_avgs) %>%
+  left_join(movie_titles, by="movieId") %>%
+  arrange(desc(b_i)) %>% 
+  select(title, b_i, n) %>% 
+  slice(1:10) %>% 
+  knitr::kable()
+
+edx %>% dplyr::count(movieId) %>% 
+  left_join(movie_avgs) %>%
+  left_join(movie_titles, by="movieId") %>%
+  arrange(b_i) %>% 
+  select(title, b_i, n) %>% 
+  slice(1:10) %>% 
+  knitr::kable()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Regularized movie and user effect model #
 lambdas <- seq(0, 10, 0.1)
@@ -241,22 +305,24 @@ rmses <- sapply(lambdas, function(l){
     left_join(b_i, by = 'movieId') %>%
     left_join(b_u, by = 'userId') %>%
     group_by(year) %>%
-    summarize(b_y = sum(rating - mu - b_i - mu)/(n() + l))
+    summarize(b_y = sum(rating - mu - b_i - b_u)/(n() + l))
   
   b_g <- edx_genres %>%
     left_join(b_i, by = 'movieId') %>%
     left_join(b_u, by = 'userId') %>%
     left_join(b_y, by = 'year') %>%
     group_by(genres) %>%
-    summarize(b_g = sum(rating - mu - b_i - b_y - mu)/(n() + l))
+    summarize(b_g = sum(rating - mu - b_i - b_u - b_y)/(n() + l))
   
   predicted_rating <- valid_genres %>%
     left_join(b_i, by = 'movieId') %>%
     left_join(b_u, by = 'userId') %>%
     left_join(b_y, by = 'year') %>%
     left_join(b_g, by = 'genres') %>%
-    mutate(pred = mu + b_i + b_u) %>%
+    mutate(pred = mu + b_i + b_u + b_y + b_g) %>%
     pull(pred)
+  
+  return(RMSE(valid_genres$rating, predicted_rating))
 })
 
 # Plot rmses vs lambdas to select the optimal lambda
@@ -270,7 +336,7 @@ lambda <- lambdas[which.min(rmses)]
 lambda
 
 # Compute regularized estimates of b_i, b_u, b_y, and b_g with lambda
-movie_avgs_reg <- edx_genres %>% 
+movie_avgs_reg <- valid_genres %>% 
   group_by(movieId) %>%
   summarize(b_i = sum(rating - mu)/(n()+lambda))
 
@@ -300,13 +366,7 @@ predicted_rating <- validation %>%
   mutate(pred = mu + b_i + b_u + b_y + b_g) %>%
   pull(pred)
 
-# Plot rmses vs lambdas to select the optimal lambda
-data.frame(lambdas, rmses) %>%
-  ggplot(aes(lambdas, rmses)) +
-  geom_point() +
-  ggtitle('rmses vs lambdas') +
-  theme(plot.title = element_text(hjust = 0.5))
 
-rmse <- RMSE(validation$rating, predicted_rating)
+rmse <- RMSE(valid_genres$rating, predicted_rating)
 rmse
 
