@@ -13,25 +13,66 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Indroduction
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-s
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+This project is related to the **MovieLens Project** of the *HarvardX: PH125.9x Data Science: Capstone course.* In this project, We will be creating a movie recommendation system using the MovieLens dataset. The version of 
+. 
 
+To compare different models or to see how well we're doing compared to a baseline, we will use **root mean squared error (RMSE) as our loss function.** If $N$ is the number of user-movie combination, $y_{u,i}$ is the rating for movie $i$ by user $u$, and $\hat{y}_{u,i}$ is our prediction, then RMSE is defined as follows:
+$$ RMSE = \sqrt{\frac{1}{N}\sum_{u,i}{(\hat{y}_{u,i}-y_{u,i})^2}} $$
+
+
+# Data Analysis
+
+Let's look at some of the general properties of the data to better understand the challenge. The first thing we notice is that some movies get rated more than others. Here is the distribution. 
+
+```{r, rating distribution}
+
+```
+
+This should not surprise us given that there are blockbusters watched by millions and artsy independent movies wathced by just a few.
+
+A second observation is that some users are more active than others at rating movies. Notice that some users ahve rated over 1,000 movies while others have only rated a handful.
+
+
+If the RMSE number is much larger than one, we're typically missing by one or more stars rating which is not very good.
+
+
+## 1. Simplest Model (Mean)
+
+We start with a model that **assumes the same rating for all movies and all users,** with all the differences explained by random variation: if $\mu$ represents the true rating for all movies and users and $\epsilon$ represents independent errors sampled from the same distribution centered at zero, then:
+$$Y_{u,i} = \mu + \epsilon_{u,i}$$
+In this case, the least squares of $\mu$, the estimate that minimizes the root mean squared error, is the average rating of all movies across all users.
+
+```{r, naive_rmse}
+
+```
+
+We compute this average on the training data. And then we compute the RMSE on the test set data. We get a RMSE of about 1.05. That's pretty bit.
+
+
+## 2. Movie Effect Model
+
+We know from experience that some movies are just generally rated highter than others. We can see this by simply making a plot of the average rating that each movie got as shown in the exploration. Thus, our intuition that different movies are rated differently is confirmed by data. We can augment our previous model by adding a term, $b_i$, that represents the average rating for movie $i$: 
+$$Y_{u,i} = \mu + b_i + \epsilon_{u,i}$$
+$b_i$ is the average of $Y_{u,i}$ minus the overall mean for each movie $i$.
+
+The movie effect can be taken into account by taking the difference form mean rating as shown in the following chunk of code.
 ```{r}
 
 ```
 
 
-```{r cars}
-summary(cars)
-```
 
-## Including Plots
+## 3. Movie + User Effects Model 
 
-You can also embed plots, for example:
+Different users will rate movies differently. We can make a histogram of those values as shown before. Note that there is substantial variability across users as well. Some cranky users may rate a good movie lower or some users love every move they watch. Thus, we can further improve our model by adding $b_u$, the user-specific effect:
+$$Y_{u,i} = \mu + b_i + b_u + \epsilon_{u,i}$$
+Now, if a cranky user (negative $b_u$) rates a great movie (positive $b_i$), the effects counter each other and we may be able to correclty predict that this user gave a great movie a three rather a five, which will  And that should improve our predictions.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## 4. 
+
+
+
+
+
+
