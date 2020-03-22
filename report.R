@@ -56,8 +56,8 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 # add year as a column in the edx & validation datasets
 edx <- edx %>% mutate(year = as.numeric(str_sub(title, -5, -2)))
 validation <- validation %>% mutate(year = as.numeric(str_sub(title, -5, -2)))
-edx_genres <- edx %>% separate_rows(genres, sep = "\\|") 
-
+edx_genres <- edx %>% separate_rows(genres, sep = '\\|') 
+valid_genres <- validation %>% separate_rows(genres, sep = "\\|")
 # check the data
 
 head(edx) 
@@ -115,4 +115,198 @@ edx_genres %>%
 # Rating vs release year
 edx %>% group_by(year) %>% summarize(rating = mean(rating)) %>% ggplot(aes(year, rating)) +
   geom_point() +
-  geom_smooth()
+  geom_smooth() +
+  ylab('Rate') +
+  ggtitle('Rate vs Release Year') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+----------------------------------------------------------
+
+# Model Preparation
+# Initiate RMSE results to compare various models
+RMSE <- function(true_ratings, predicted_ratings){
+  sqrt(mean((true_ratings - predicted_ratings)^2))
+}
+
+# Simplest possible model (Average movie rating model) #
+mu <- mean(edx$rating)
+mu
+
+naive_rmse <- RMSE(validation$rating, mu)
+naive_rmse
+
+# Movie Effect Model #
+movie_avgs <- edx %>%
+  group_by(movieId) %>%
+  summarize(b_i = mean(rating - mu))
+movie_avgs %>% ggplot(aes(b_i)) +
+  geom_histogram(bins = 30, fill = 'steelblue', col = 'black') + 
+  ggtitle('Movie Effect') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+predicted_rating <- mu + validation %>%
+  left_join(movie_avgs, by = 'movieId') %>%
+  pull(b_i)
+model_rmse <- RMSE(validation$rating, predicted_rating)
+model_rmse
+
+# Movie and User Effect Model #
+user_avgs <- edx %>% 
+  left_join(movie_avgs, by = 'movieId') %>%
+  group_by(userId) %>% 
+  summarize(b_u = mean(rating - mu - b_i))
+user_avgs %>% ggplot(aes(b_u)) +
+  geom_histogram(bins = 30, fill = 'steelblue', col = 'black') + 
+  ggtitle('User Effect') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+predicted_rating <- validation %>%
+  left_join(movie_avgs, by = 'movieId') %>%
+  left_join(user_avgs, by = 'userId') %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  pull(pred)
+
+user_rmse <- RMSE(validation$rating, predicted_rating)  
+user_rmse
+
+# Regularized movie and user effect model #
+lambdas <- seq(0, 10, 0.1)
+rmses <- sapply(lambdas, function(l){
+  mu <- mean(edx$rating)
+  
+  b_i <- edx %>% 
+    group_by(movieId) %>%
+    summarize(b_i = sum(rating - mu)/(n() + l))
+  
+  b_u <- edx %>% 
+    left_join(b_i, by = 'movieId') %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - mu - b_i)/(n() + l))
+  
+  predicted_rating <- validation %>%
+    left_join(b_i, by = 'movieId') %>%
+    left_join(b_u, by = 'userId') %>%
+    mutate(pred = mu + b_i + b_u) %>%
+    pull(pred)
+  
+  return(RMSE(validation$rating, predicted_rating))
+})
+
+# Plot rmses vs lambdas to select the optimal lambda
+data.frame(lambdas, rmses) %>%
+  ggplot(aes(lambdas, rmses)) +
+  geom_point() +
+  ggtitle('rmses vs lambdas') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+lambda <- lambdas[which.min(rmses)]
+lambda
+
+# Compute regularized estimates of b_i, b_u with lambda
+movie_avgs_reg <- edx %>% 
+  group_by(movieId) %>%
+  summarize(b_i = sum(rating - mu)/(n()+lambda))
+
+user_avgs_reg <- edx %>% 
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  group_by(userId) %>%
+  summarize(b_u = sum(rating - mu - b_i)/(n() + lambda))
+
+predicted_rating <- validation %>%
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  left_join(user_avgs_reg, by = 'userId') %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  pull(pred)
+
+
+rmse <- RMSE(validation$rating, predicted_rating)
+rmse
+
+# Regularized movies, users, years and genres #
+
+lambdas <- seq(0, 20, 0.5)
+rmses <- sapply(lambdas, function(l){
+  mu <- mean(edx$rating)
+  
+  b_i <- edx_genres %>% 
+    group_by(movieId) %>%
+    summarize(b_i = sum(rating - mu)/(n() + l))
+  
+  b_u <- edx_genres %>%
+    left_join(b_i, by = 'movieId') %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n() + l))
+  
+  b_y <- edx_genres %>%
+    left_join(b_i, by = 'movieId') %>%
+    left_join(b_u, by = 'userId') %>%
+    group_by(year) %>%
+    summarize(b_y = sum(rating - mu - b_i - mu)/(n() + l))
+  
+  b_g <- edx_genres %>%
+    left_join(b_i, by = 'movieId') %>%
+    left_join(b_u, by = 'userId') %>%
+    left_join(b_y, by = 'year') %>%
+    group_by(genres) %>%
+    summarize(b_g = sum(rating - mu - b_i - b_y - mu)/(n() + l))
+  
+  predicted_rating <- valid_genres %>%
+    left_join(b_i, by = 'movieId') %>%
+    left_join(b_u, by = 'userId') %>%
+    left_join(b_y, by = 'year') %>%
+    left_join(b_g, by = 'genres') %>%
+    mutate(pred = mu + b_i + b_u) %>%
+    pull(pred)
+})
+
+# Plot rmses vs lambdas to select the optimal lambda
+data.frame(lambdas, rmses) %>%
+  ggplot(aes(lambdas, rmses)) +
+  geom_point() +
+  ggtitle('rmses vs lambdas') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+lambda <- lambdas[which.min(rmses)]
+lambda
+
+# Compute regularized estimates of b_i, b_u, b_y, and b_g with lambda
+movie_avgs_reg <- edx_genres %>% 
+  group_by(movieId) %>%
+  summarize(b_i = sum(rating - mu)/(n()+lambda))
+
+user_avgs_reg <- edx_genres %>% 
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  group_by(userId) %>%
+  summarize(b_u = sum(rating - mu - b_i)/(n() + lambda))
+
+year_avgs_reg <- edx_genres %>%
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  left_join(user_avgs_reg, by = 'userId') %>%
+  group_by(year) %>%
+  summarize(b_y = sum(rating - mu - b_i - b_u)/(n() + lambda))
+
+genre_avgs_reg <- edx_genres %>%
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  left_join(user_avgs_reg, by = 'userId') %>%
+  left_join(year_avgs_reg, by = 'year') %>%
+  group_by(genres) %>%
+  summarize(b_g = sum(rating - mu - b_i - b_u - b_y)/(n() + lambda))
+
+predicted_rating <- validation %>%
+  left_join(movie_avgs_reg, by = 'movieId') %>%
+  left_join(user_avgs_reg, by = 'userId') %>%
+  left_join(year_avgs_reg, by = 'year') %>%
+  left_join(genre_avgs_reg, by = 'genres') %>%
+  mutate(pred = mu + b_i + b_u + b_y + b_g) %>%
+  pull(pred)
+
+# Plot rmses vs lambdas to select the optimal lambda
+data.frame(lambdas, rmses) %>%
+  ggplot(aes(lambdas, rmses)) +
+  geom_point() +
+  ggtitle('rmses vs lambdas') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+rmse <- RMSE(validation$rating, predicted_rating)
+rmse
+
