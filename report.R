@@ -71,10 +71,10 @@ edx %>% summarize(n_users = n_distinct(userId), n_movies = n_distinct(movieId), 
 
 # Total movie ratings per genre
 edx_genres %>%
-group_by(genres) %>%
-summarize(count = n()) %>%
-arrange(desc(count)) %>%
-head(10)
+  group_by(genres) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  head(10)
 
 # Top 10 movies ranked by number of ratings
 edx %>% group_by(movieId, title) %>%
@@ -178,16 +178,21 @@ predicted_rating <- validation %>%
 model_2_rmse <- RMSE(validation$rating, predicted_rating)  
 model_2_rmse
 rmse_results <- bind_rows(rmse_results,
-                          data_frame(method = 'Movie + User Effects Model',
+                          data_frame(method = 'Movie and User Effects Model',
                                      RMSE = model_2_rmse))
+rmse_results %>% knitr::kable()
 
-# 
+
+# Regularized movie and user effects model #
+
+# 10 largest mistakes that we make with movie effect model
 edx %>% 
   left_join(movie_avgs, by='movieId') %>%
   mutate(residual = rating - (mu + b_i)) %>%
   arrange(desc(abs(residual))) %>% 
   select(title,  residual) %>% slice(1:10) %>% knitr::kable()
 
+# top 10 best movies
 movie_titles <- movielens %>% 
   select(movieId, title) %>%
   distinct()
@@ -198,12 +203,7 @@ movie_avgs %>% left_join(movie_titles, by="movieId") %>%
   slice(1:10) %>%  
   knitr::kable()
 
-movie_avgs %>% left_join(movie_titles, by="movieId") %>%
-  arrange(b_i) %>% 
-  select(title, b_i) %>% 
-  slice(1:10) %>%  
-  knitr::kable()
-
+# how often are top 10 best movies rated
 edx %>% dplyr::count(movieId) %>% 
   left_join(movie_avgs) %>%
   left_join(movie_titles, by="movieId") %>%
@@ -212,28 +212,9 @@ edx %>% dplyr::count(movieId) %>%
   slice(1:10) %>% 
   knitr::kable()
 
-edx %>% dplyr::count(movieId) %>% 
-  left_join(movie_avgs) %>%
-  left_join(movie_titles, by="movieId") %>%
-  arrange(b_i) %>% 
-  select(title, b_i, n) %>% 
-  slice(1:10) %>% 
-  knitr::kable()
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-# Regularized movie and user effect model #
 lambdas <- seq(0, 10, 0.1)
 rmses <- sapply(lambdas, function(l){
   mu <- mean(edx$rating)
@@ -283,8 +264,12 @@ predicted_rating <- validation %>%
   pull(pred)
 
 
-rmse <- RMSE(validation$rating, predicted_rating)
-rmse
+model_3_rmse <- RMSE(validation$rating, predicted_rating)
+model_3_rmse
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method = 'Movie and User Effects Model',
+                                     RMSE = model_3_rmse))
+rmse_results %>% knitr::kable()
 
 # Regularized movies, users, years and genres #
 
@@ -366,7 +351,9 @@ predicted_rating <- validation %>%
   mutate(pred = mu + b_i + b_u + b_y + b_g) %>%
   pull(pred)
 
-
-rmse <- RMSE(valid_genres$rating, predicted_rating)
-rmse
-
+model_4_rmse <- RMSE(valid_genres$rating, predicted_rating)
+model_4_rmse
+rmse_results <- bind_rows(rmse_results,
+                          data_frame(method = 'Movie and User Effects Model',
+                                     RMSE = model_4_rmse))
+rmse_results %>% knitr::kable()
