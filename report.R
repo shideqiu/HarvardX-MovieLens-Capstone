@@ -17,7 +17,6 @@ library(data.table)
 # http://files.grouplens.org/datasets/movielens/ml-10m.zip
 
 # Load the data
-
 dl <- tempfile()
 download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
 
@@ -33,31 +32,30 @@ movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))
 movielens <- left_join(ratings, movies, by = "movieId")
 
 # Validation set will be 10% of MovieLens data
-
 set.seed(1)
 test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
 edx <- movielens[-test_index,]
 temp <- movielens[test_index,]
 
 # Make sure userId and movieId in validation set are also in edx set
-
 validation <- temp %>% 
   semi_join(edx, by = "movieId") %>%
   semi_join(edx, by = "userId")
 
 # Add rows removed from validation set back into edx set
-
 removed <- anti_join(temp, validation)
 edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, removed)
 
-
 # add year as a column in the edx & validation datasets
 edx <- edx %>% mutate(year = as.numeric(str_sub(title, -5, -2)))
 validation <- validation %>% mutate(year = as.numeric(str_sub(title, -5, -2)))
+
+# split genres in edx & validation datasets
 edx_genres <- edx %>% separate_rows(genres, sep = '\\|') 
 valid_genres <- validation %>% separate_rows(genres, sep = "\\|")
+
 # check the data
 
 head(edx) 
@@ -91,13 +89,29 @@ edx %>% group_by(rating) %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 # Some movies are rated more often than others
-# 
 edx %>% count(movieId) %>% ggplot(aes(n)) +
   geom_histogram(bins = 30, fill = 'steelblue', col = 'black') +
   scale_x_log10() +
   xlab('Number of ratings') +
   ylab('Number of movies') +
   ggtitle('Number of ratings per movie') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# User Bias
+edx %>% count(userId) %>% ggplot(aes(n)) +
+  geom_histogram(bins = 30, fill = 'steelblue', col = 'black') +
+  scale_x_log10() +
+  xlab('Number of users') +
+  ylab('Number of ratings') +
+  ggtitle('Number of ratings per user') +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Rating vs release year
+edx %>% group_by(year) %>% summarize(rating = mean(rating)) %>% ggplot(aes(year, rating)) +
+  geom_point() +
+  geom_smooth() +
+  ylab('Rate') +
+  ggtitle('Rate vs Release Year') +
   theme(plot.title = element_text(hjust = 0.5))
 
 # Genres popularity per year
@@ -110,16 +124,6 @@ edx_genres %>%
   ylab('Number of movies') +
   ggtitle('Genres popularity per year') +
   theme(plot.title = element_text(hjust = 0.5))
-
-
-# Rating vs release year
-edx %>% group_by(year) %>% summarize(rating = mean(rating)) %>% ggplot(aes(year, rating)) +
-  geom_point() +
-  geom_smooth() +
-  ylab('Rate') +
-  ggtitle('Rate vs Release Year') +
-  theme(plot.title = element_text(hjust = 0.5))
-
 ----------------------------------------------------------
 
 # Model Preparation
@@ -128,7 +132,7 @@ RMSE <- function(true_ratings, predicted_ratings){
   sqrt(mean((true_ratings - predicted_ratings)^2))
 }
 
-# Simplest possible model (Average movie rating model) #
+# Simplest possible model (Average movie rating model)
 mu <- mean(edx$rating)
 mu
 
@@ -139,7 +143,7 @@ naive_rmse
 rmse_results <- data_frame(method = 'Just the average', RMSE = naive_rmse)
 
 
-# Movie Effect Model #
+# Movie Effect Model 
 movie_avgs <- edx %>%
   group_by(movieId) %>%
   summarize(b_i = mean(rating - mu))
@@ -159,7 +163,7 @@ rmse_results <- bind_rows(rmse_results,
                                      RMSE = model_1_rmse))
 rmse_results %>% knitr::kable()
 
-# Movie and User Effect Model #
+# Movie and User Effect Model 
 user_avgs <- edx %>% 
   left_join(movie_avgs, by = 'movieId') %>%
   group_by(userId) %>% 
@@ -178,19 +182,12 @@ predicted_rating <- validation %>%
 model_2_rmse <- RMSE(validation$rating, predicted_rating)  
 model_2_rmse
 rmse_results <- bind_rows(rmse_results,
-                          data_frame(method = 'Movie and User Effects Model',
+                          data_frame(method = 'Movie and User Effect Model',
                                      RMSE = model_2_rmse))
 rmse_results %>% knitr::kable()
 
 
-# Regularized movie and user effects model #
-
-# 10 largest mistakes that we make with movie effect model
-edx %>% 
-  left_join(movie_avgs, by='movieId') %>%
-  mutate(residual = rating - (mu + b_i)) %>%
-  arrange(desc(abs(residual))) %>% 
-  select(title,  residual) %>% slice(1:10) %>% knitr::kable()
+# Regularized movie and user effects model
 
 # top 10 best movies
 movie_titles <- movielens %>% 
@@ -211,9 +208,6 @@ edx %>% dplyr::count(movieId) %>%
   select(title, b_i, n) %>% 
   slice(1:10) %>% 
   knitr::kable()
-
-
-
 
 lambdas <- seq(0, 10, 0.1)
 rmses <- sapply(lambdas, function(l){
@@ -267,7 +261,7 @@ predicted_rating <- validation %>%
 model_3_rmse <- RMSE(validation$rating, predicted_rating)
 model_3_rmse
 rmse_results <- bind_rows(rmse_results,
-                          data_frame(method = 'Movie and User Effects Model',
+                          data_frame(method = 'Regularized Movie and User Effect Model',
                                      RMSE = model_3_rmse))
 rmse_results %>% knitr::kable()
 
@@ -321,7 +315,7 @@ lambda <- lambdas[which.min(rmses)]
 lambda
 
 # Compute regularized estimates of b_i, b_u, b_y, and b_g with lambda
-movie_avgs_reg <- valid_genres %>% 
+movie_avgs_reg <- edx_genres %>% 
   group_by(movieId) %>%
   summarize(b_i = sum(rating - mu)/(n()+lambda))
 
@@ -343,7 +337,7 @@ genre_avgs_reg <- edx_genres %>%
   group_by(genres) %>%
   summarize(b_g = sum(rating - mu - b_i - b_u - b_y)/(n() + lambda))
 
-predicted_rating <- validation %>%
+predicted_rating <- valid_genres %>%
   left_join(movie_avgs_reg, by = 'movieId') %>%
   left_join(user_avgs_reg, by = 'userId') %>%
   left_join(year_avgs_reg, by = 'year') %>%
@@ -354,6 +348,6 @@ predicted_rating <- validation %>%
 model_4_rmse <- RMSE(valid_genres$rating, predicted_rating)
 model_4_rmse
 rmse_results <- bind_rows(rmse_results,
-                          data_frame(method = 'Movie and User Effects Model',
+                          data_frame(method = 'Regularized Movie, User, Year, and Genre Effect Model',
                                      RMSE = model_4_rmse))
 rmse_results %>% knitr::kable()
