@@ -12,11 +12,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-# 1. Indroduction
+# 1. Introduction
 
-This project is related to the **MovieLens Project** of the *HarvardX: PH125.9x Data Science: Capstone course.* In this project, We will be creating a movie recommendation system using the MovieLens dataset. The 10M version of the MovieLens dataset was provided and used in this project. 
+This project is related to the **MovieLens Project** of the *HarvardX: PH125.9x Data Science: Capstone course.* In this project, we will be creating a movie recommendation system using the MovieLens dataset. The 10M version of the MovieLens dataset was provided and used in this project. 
 
-In this project, we will trian a machine learning algorithm using the inputs in one subset to (edx dataset) predict movie ratings in the validation set. To compare different models or to see how well we're doing compared to a baseline, we will use **root mean squared error (RMSE) as our loss function.** RMSE is one of the most popular measure of accuracy, to compare forecasting errors of different models for a particular dataset. If $N$ is the number of user-movie combination, $y_{u,i}$ is the rating for movie $i$ by user $u$, and $\hat{y}_{u,i}$ is our prediction, then RMSE is defined as follows:
+In this project, we will train a machine learning algorithm using the inputs in one subset to (edx dataset) predict movie ratings in the validation set. To compare different models or to see how well we're doing compared to a baseline, we will use **root mean squared error (RMSE) as our loss function.** RMSE is one of the most popular measure of accuracy, to compare forecasting errors of different models for a particular dataset. If $N$ is the number of user-movie combination, $y_{u,i}$ is the rating for movie $i$ by user $u$, and $\hat{y}_{u,i}$ is our prediction, then RMSE is defined as follows:
 $$ RMSE = \sqrt{\frac{1}{N}\sum_{u,i}{(\hat{y}_{u,i}-y_{u,i})^2}} $$
 The best model is the one with lowest RMSE and will be used to predict the movie ratings.
 
@@ -63,7 +63,7 @@ movielens <- left_join(ratings, movies, by = "movieId")
 
 ## 2.1. Data Pre-processing
 
-The MovieLens dataset will be splittedinto 2 subsets: "edx", a training subset to train the algorithm, and "validation", as subset to test toe movie ratings.
+The MovieLens dataset will be splitted into 2 subsets: "edx", a training subset to train the algorithm, and "validation", as subset to test toe movie ratings.
 ```{r create a tidy dataset for further analysis, results = 'hide'}
 # Validation set will be 10% of MovieLens data
 set.seed(1)
@@ -154,11 +154,11 @@ edx %>% count(movieId) %>% ggplot(aes(n)) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-This should not surprise us given that there are blockbusters watched by millions and artsy independent movies wathced by just a few.
+This should not surprise us given that there are blockbusters watched by millions and artsy independent movies watched by just a few.
 
 ### 2.2.5. User Bias
 
-A second observation is that some users are more active than others at rating movies. Notice that some users ahve rated over 1,000 movies while others have only rated a handful.
+A second observation is that some users are more active than others at rating movies. Notice that some users have rated over 1,000 movies while others have only rated a handful.
 ```{r user bias}
 edx %>% count(userId) %>% ggplot(aes(n)) +
   geom_histogram(bins = 30, fill = 'steelblue', col = 'black') +
@@ -199,7 +199,7 @@ edx_genres %>%
 
 # 3. Modeling Approach
 
-Firstly, we create the loss fuction, RMSE as shown below:
+Firstly, we create the loss function RMSE as shown below:
 ```{r initiate RMSE results to compare various models}
 RMSE <- function(true_ratings, predicted_ratings){
   sqrt(mean((true_ratings - predicted_ratings)^2))
@@ -228,7 +228,7 @@ rmse_results <- data_frame(method = 'Just the average', RMSE = naive_rmse)
 
 ## 3.2. Movie Effect Model
 
-We know from experience that some movies are just generally rated highter than others. We can see this by simply making a plot of the average rating that each movie got as shown in the Rate Distribution plot. Thus, our intuition that different movies are rated differently is confirmed by data. We can augment our previous model by adding a term, $b_i$, that represents the average rating for movie $i$: 
+We know from experience that some movies are just generally rated higher than others. We can see this by simply making a plot of the average rating that each movie got as shown in the Rate Distribution plot. Thus, our intuition that different movies are rated differently is confirmed by data. We can augment our previous model by adding a term, $b_i$, that represents the average rating for movie $i$: 
 $$Y_{u,i} = \mu + b_i + \epsilon_{u,i}$$
 $b_i$ is the average of $Y_{u,i}$ minus the overall mean for each movie $i$.
 
@@ -274,7 +274,7 @@ user_avgs %>% ggplot(aes(b_u)) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Now, if a cranky user (negative $b_u$) rates a great movie (positive $b_i$), the effects counter each other and we may be able to correclty predict that this user gave a great movie a three rather a five, which will happen. And that should improve our predictions.
+Now, if a cranky user (negative $b_u$) rates a great movie (positive $b_i$), the effects counter each other and we may be able to correctly predict that this user gave a great movie a three rather a five, which will happen. And that should improve our predictions.
 ```{r movie and user effect model}
 predicted_rating <- validation %>%
   left_join(movie_avgs, by = 'movieId') %>%
@@ -318,7 +318,7 @@ edx %>% dplyr::count(movieId) %>%
   knitr::kable()
 ```
 
-Here is the same table, but not we include the number of ratings they received in our training set. Thus, the supposed best movies were rated by very few users, in most cases just one. These movies were mostly obscure ones. This is because with just a few users, we have more uncertainty. Therefore, larger estimates of $b_i$ are more likely when fewer users rate the movies. There are basically noisy estimates that we should not trust, especially when it comes to prediction. To improve our results, we will use regularization. Regularizaion contrains the total variability of the effect sizes by penalizing large estimates that come from small sample sizes. Here, we should find the optimal value of lambda (tuning parameter) that will minimize the RMSE. 
+Here is the same table, but not we include the number of ratings they received in our training set. Thus, the supposed best movies were rated by very few users, in most cases just one. These movies were mostly obscure ones. This is because with just a few users, we have more uncertainty. Therefore, larger estimates of $b_i$ are more likely when fewer users rate the movies. There are basically noisy estimates that we should not trust, especially when it comes to prediction. To improve our results, we will use regularization. Regularization constrains the total variability of the effect sizes by penalizing large estimates that come from small sample sizes. Here, we should find the optimal value of lambda (tuning parameter) that will minimize the RMSE. 
 
 ```{r regularized movie and user effects model}
 lambdas <- seq(0, 10, 0.1)
@@ -490,7 +490,7 @@ The RMSE values for the used models are shown below:
 rmse_results %>% knitr::kable()
 ```
 
-We can confirm that we have built a machine learning algorithm to predict movie ratings with MovieLens dataset. The RMSE table shows an improvement over different models. The simplest model (Average Movie Rating Model) calculates the RMSE more than 1 which means we may miss the rating by one star. The "Movie Effect" and "Movie and User Effect" model improve the accurancy by 11% and 18.4% respectively. This is a significant improvent due to the simplicity of the model. A deeper exploration to the data reveals that we ignore the overfitting issue. Thus, we applied regularization to get of this issue and further improve our result. In conclusion, the final RMSE is 0.8626097 with an improvement over 18.7% with respect to the simples model.
+We can confirm that we have built a machine learning algorithm to predict movie ratings with MovieLens dataset. The RMSE table shows an improvement over different models. The simplest model (Average Movie Rating Model) calculates the RMSE more than 1 which means we may miss the rating by one star. The "Movie Effect" and "Movie and User Effect" model improve the accuracy by 11% and 18.4% respectively. This is a significant improvement due to the simplicity of the model. A deeper exploration to the data reveals that we ignore the overfitting issue. Thus, we applied regularization to get of this issue and further improve our result. In conclusion, the final RMSE is 0.8626097 with an improvement over 18.7% with respect to the simple model.
 
 
 
